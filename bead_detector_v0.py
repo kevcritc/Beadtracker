@@ -434,7 +434,7 @@ class Beadtracker():
         while deltaxy>1 and count<25:
             pxmean,pymean=xmean,ymean
             maxdis=0.5*sqrt(pxmean**2+pymean**2)
-            if maxdis<20:
+            if maxdis<50:
                 maxdis=100
             print(xmean,ymean, tracks, maxlength)
             analysis.pairup(xmean,ymean, maxdis)
