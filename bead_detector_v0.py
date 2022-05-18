@@ -109,9 +109,11 @@ class Process_beads(Movie):
                 self.area_list.append(bead_info.area)
                 self.bead_list.append(bead_info.bead_no)
         
-    def pairup(self, Xmean, Ymean, maxdistance=800):
+    def pairup(self, Xmean, Ymean, maxdistance=800, w1=1,w2=1):
         self.Xmean=Xmean
         self.Ymean=Ymean
+        self.w1=w1
+        self.w2=w2
         self.maxdistance=maxdistance
         framesl=np.arange(0,max(self.frame_no_list)+1)
         #Establish list of the indicies for cells tracked in each frame
@@ -142,7 +144,7 @@ class Process_beads(Movie):
                         y1=self.y_list[b]
                         x2=self.x_list[c]
                         y2=self.y_list[c]
-                        seperation=sqrt(((x2-self.Xmean)-x1)**2+((y2-self.Ymean)-y1)**2)+abs(area2-area1)
+                        seperation=self.w1*sqrt(((x2-self.Xmean)-x1)**2+((y2-self.Ymean)-y1)**2)+self.w2*abs(area2-area1)
                         
                         separr[b1,c1]=seperation
                  noresult=True
@@ -234,9 +236,52 @@ class Process_beads(Movie):
         
             #Put all the data in this list such that each path is an object in the list   
             self.datapack.append([xpos, ypos, tpos, area,b_number])    
+        maxvalueallowed=self.maxdistance*1.5
+        
+        i=0
+        while i<len(self.datapack)-1:
+            #check the last time point and then look to see if a new time point starts +2 which is in the same region and has same colour.
+            endt=self.datapack[i][2][-1]
+            endx=self.datapack[i][0][-1]
+            endy=self.datapack[i][1][-1]
+            endarea=self.datapack[i][3][-1]
+        
+            matse=[]
+            svals=[]
+            for j in range(i+1,len(self.datapack)):
+                if self.datapack[j][2][0]==endt+2:
+                    
+                    matse.append(j)
+            
+            if len(matse)>0:
+            
+                
+                for v in matse:
+                    sx=self.datapack[v][0][0]
+                    sy=self.datapack[v][1][0]
+                    sarea=self.datapack[v][3][0]
+    
+                    sep=self.w1*sqrt(((sx-self.Xmean*2)-endx)**2+((sy-self.Ymean*2)-endy)**2)+self.w2*abs(sarea-endarea)
+
+                    svals.append(sep)
+                   
+                min_value=min(svals)
+                min_index=svals.index(min_value)
+                # This patches the 'the before and after' missed frame together
+                if min_value<maxvalueallowed:
+                    
+                    for q in range(5):
+                        a=self.datapack[i][q]
+                        b=self.datapack[matse[min_index]][q]
+                            
+                        c=a+b
+                        self.datapack[i][q]=c
+                    self.datapack.pop(matse[min_index])
+            i+=1
     def find_means(self):
         meansofx=[]
         meansofy=[]
+        maxlength=0
         for data in self.datapack:
             if len(data)>3:
                 xarray=np.array(data[0])
@@ -246,17 +291,21 @@ class Process_beads(Movie):
                 mean_X, mean_Y= np.mean(xdiff),np.mean(ydiff)
                 meansofx.append(mean_X)
                 meansofy.append(mean_Y)
+                if len(data)>maxlength:
+                    maxlength=len(data)
         Xarry=np.array(meansofx)
         Yarry=np.array(meansofy)
         Xmean=np.mean(Xarry)
         Ymean=np.mean(Yarry)
-        return Xmean, Ymean
+        number_tracks=len(self.datapack)
+        return Xmean, Ymean, number_tracks, maxlength
     def plotalltracks(self):
         for data in self.datapack:
             ax = plt.gca()
             ax.plot(data[0],data[1], linewidth=1.0)
             ax.set_xlabel('x /pixel')
             ax.set_ylabel('y /pixel')
+        
            
         
         ax.invert_yaxis()    
@@ -333,29 +382,31 @@ class Process_beads(Movie):
                     
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
-                
+             
         df1['x']=df1['x']/self.scale
         df1['y']=df1['y']/self.scale
         df1['t']=df1['t']*self.tpf
         df1['area']=df1['area']/self.scale**2
         df1['di']=df1['di']/self.scale
         df1['vi']=df1['vi']/(self.scale*self.tpf)
-        df1['Total Distance']=df1['Total Distance']/self.scale
-        df1['Net Distance']=df1['Net Distance']/self.scale
-        df1['Max Step']=df1['Max Step']/self.scale
-        df1['dmax']=df1['dmax']/self.scale
-        df1['Total Time']=df1['Total Time']*self.tpf
-        df1['Mean straight-line speed']=df1['Mean straight-line speed']/(self.scale*self.tpf)
-        df1['Net x velocity']=df1['net delta x']/df1['Total Time']
-        df1['Net y velocity']=df1['net delta y']/df1['Total Time']
+        if df1.shape[1]>8:
+            df1['Total Distance']=df1['Total Distance']/self.scale
+            df1['Net Distance']=df1['Net Distance']/self.scale
+            df1['Max Step']=df1['Max Step']/self.scale
+            df1['dmax']=df1['dmax']/self.scale
+            df1['Total Time']=df1['Total Time']*self.tpf
+            df1['Mean straight-line speed']=df1['Mean straight-line speed']/(self.scale*self.tpf)
+            df1['Net x velocity']=df1['net delta x']/df1['Total Time']
+            df1['Net y velocity']=df1['net delta y']/df1['Total Time']
         
         
         self.dataframe=df1    
         
     def write_excel(self):
-        ave=self.dataframe['Mean straight-line speed'].mean()
-        sem=self.dataframe['Mean straight-line speed'].sem()
-        print(f'The mean speed is {ave:.0f} +/- {sem:.0f}')
+        if self.dataframe.shape[1]>8:
+            ave=self.dataframe['Mean straight-line speed'].mean()
+            sem=self.dataframe['Mean straight-line speed'].sem()
+            print(f'The mean speed is {ave:.0f} +/- {sem:.0f}')
         
         csvfilename=self.filename[:-4]+'_processed.xlsx'
         self.dataframe.to_excel(csvfilename)
@@ -371,37 +422,43 @@ class Beadtracker():
     def __init__(self,path, file, scale, framerate, guessx, guessy):
         analysis=Process_beads(path, file, scale, framerate)
         analysis.run()
-        try:
-            analysis.create_data_lists()
-            analysis.pairup(guessx,guessy)
+        # try:
+        analysis.create_data_lists()
+        analysis.pairup(guessx,guessy)
+        analysis.listup()
+        analysis.bead_pathways()
+        analysis.createdatapack()
+        xmean,ymean, tracks, maxlength=analysis.find_means()
+        deltaxy=50
+        count=0
+        while deltaxy>1 and count<25:
+            pxmean,pymean=xmean,ymean
+            maxdis=0.5*sqrt(pxmean**2+pymean**2)
+            if maxdis<20:
+                maxdis=100
+            print(xmean,ymean, tracks, maxlength)
+            analysis.pairup(xmean,ymean, maxdis)
             analysis.listup()
             analysis.bead_pathways()
             analysis.createdatapack()
-            xmean,ymean=analysis.find_means()
-            deltaxy=50
-            count=0
-            while deltaxy>0.5 and count<25:
-                pxmean,pymean=xmean,ymean
-                print(xmean,ymean)
-                analysis.pairup(xmean,ymean, 0.4*sqrt(xmean**2+ymean**2))
-                analysis.listup()
-                analysis.bead_pathways()
-                analysis.createdatapack()
-                xmean,ymean=analysis.find_means()
-                deltaxy=sqrt((xmean-pxmean)**2+(ymean-pymean)**2)
-                count+=1
+            xmean,ymean, tracks, maxlength=analysis.find_means()
+            deltaxy=sqrt((xmean-pxmean)**2+(ymean-pymean)**2)
+            count+=1
+        try:
             analysis.plotalltracks()
             analysis.applyscales()
             analysis.write_excel()
             analysis.plothisogram()
         except ValueError:
-            print('Try a better mean pixel velocity guess')
+             print('Failed to work!')
 
-path='/Users/phykc/Documents/Work/beads/'    
-file='Db X10 V1 300MU.avi'
+path=r'/Users/phykc/Documents/Work/beads/'    
+file=r'D1 F X10 300UM V3.avi'
 scale=1.55
 framerate=0.44
-guessx=250
+# use a guess larger than the average
+guessx=10
 guessy=0
 bt=Beadtracker(path, file, scale, framerate, guessx,guessy)
+
 
