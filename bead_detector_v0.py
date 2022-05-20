@@ -343,7 +343,7 @@ class Process_beads(Movie):
                     separation=sqrt((dat[0][j]-dat[0][j-1])**2+(dat[1][j]-dat[1][j-1])**2)
                     speed=separation/(dat[2][j]-dat[2][j-1])
                    
-                    d={'Cell number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed]}
+                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed]}
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
                     
@@ -368,7 +368,7 @@ class Process_beads(Movie):
                     max_dis=df1.loc[df1['Bead number'] == i, 'di'].max()
 
                    
-                    mean_curv_speed=(speed+df1.loc[df1['Cell number'] == i, 'vi'].sum())/(pathlength-1)
+                    mean_curv_speed=(speed+df1.loc[df1['Bead number'] == i, 'vi'].sum())/(pathlength-1)
                     deltanetx=dat[0][j]-dat[0][0]
                     deltanety=dat[1][j]-dat[1][0]
                     mean_sl_speed=net_dis/total_time
@@ -461,8 +461,9 @@ scale=1.55
 framerate=0.44
 guessx=100 #in pixels per frame
 guessy=0 #in pixels per frame
-wait_time=0 #in ms or 0 to wait for a key press
+wait_time=0 #in ms
 area_limit=500 #in pixels
 bt=Beadtracker(path, file, scale, framerate, guessx,guessy, wait_time, area_limit)
+
 
 
