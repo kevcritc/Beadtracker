@@ -461,7 +461,7 @@ scale=1.55
 framerate=0.44
 guessx=100 #in pixels per frame
 guessy=0 #in pixels per frame
-wait_time=0 #in ms
+wait_time=1000 #in ms
 area_limit=500 #in pixels
 bt=Beadtracker(path, file, scale, framerate, guessx,guessy, wait_time, area_limit)
 
