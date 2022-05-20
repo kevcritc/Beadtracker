@@ -16,7 +16,7 @@ from tkinter import *
 from tkinter import filedialog
 
 class Movie():  
-    def __init__(self, path, file, blurvalue=3):
+    def __init__(self, path, file,wait_time, area_limit, blurvalue=3):
         """Reads the details of the movie file"""
         self.file=file
         self.path=path
@@ -31,6 +31,8 @@ class Movie():
         self.blurvalue=blurvalue
         self.backSub = cv2.createBackgroundSubtractorMOG2()
         self.kernel=cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
+        self.wait_time=wait_time
+        self.area_limit=area_limit
         
     def run(self):
         frameno=0
@@ -54,30 +56,31 @@ class Movie():
             hr,thresh = cv2.threshold(filterimg,100,255,cv2.THRESH_BINARY)
             erode=cv2.erode(thresh,self.kernel)
             cv2.imshow('show',erode)
-            cv2.waitKey(10)
+            cv2.waitKey(wait_time)
                 
-            self.frames.append(Frame(erode,image,frameno))
+            self.frames.append(Frame(erode,image,frameno, self.area_limit))
             frameno+=1
         cv2.destroyAllWindows()
         cv2.waitKey(1)
 
 class Frame:
-    def __init__(self, img,orimg, frameno):
+    def __init__(self, img,orimg, frameno, arealimit):
         self.beads=[]
         self.img=img
         self.imgcopy=self.img.copy()
         self.frameno=frameno
         self.orimg=orimg
+        self.arealimit=arealimit
         contours, hierarchy = cv2.findContours(self.img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
-            if len(cnt)>8:
+            if len(cnt)>1:
                 x,y,w,h = cv2.boundingRect(cnt)
                 area = cv2.contourArea(cnt)
-                M = cv2.moments(cnt)
-                cx = int(M['m10']/M['m00'])
-                cy = int(M['m01']/M['m00'])
-                self.beads.append(Bead(cx,cy,area, self.frameno, len(self.beads)))
-                cv2.rectangle(self.orimg,(x,y),(x+w,y+h),(0,255,0),2)
+                if area<self.arealimit:
+                    cx=x+0.5*w
+                    cy=y+0.5*h
+                    self.beads.append(Bead(cx,cy,area, self.frameno, len(self.beads)))
+                    cv2.rectangle(self.orimg,(x,y),(x+w,y+h),(0,255,0),2)
         cv2.imshow('found',self.orimg)
         cv2.waitKey(1)
 class Bead:
@@ -89,8 +92,8 @@ class Bead:
         self.bead_no=number
         
 class Process_beads(Movie):
-    def __init__(self,path, file, scale,framerate):
-        super().__init__(path, file)
+    def __init__(self,path, file, scale,framerate, wait_time, area_limit):
+        super().__init__(path, file, wait_time, area_limit)
         self.scale=scale
         self.tpf=framerate
         
@@ -419,8 +422,8 @@ class Process_beads(Movie):
         plt.show()
      
 class Beadtracker():
-    def __init__(self,path, file, scale, framerate, guessx, guessy):
-        analysis=Process_beads(path, file, scale, framerate)
+    def __init__(self,path, file, scale, framerate, guessx, guessy, wait_time, area_limit):
+        analysis=Process_beads(path, file, scale, framerate, wait_time, area_limit)
         analysis.run()
         # try:
         analysis.create_data_lists()
@@ -431,7 +434,7 @@ class Beadtracker():
         xmean,ymean, tracks, maxlength=analysis.find_means()
         deltaxy=50
         count=0
-        while deltaxy>1 and count<25:
+        while deltaxy>0.5 and count<25:
             pxmean,pymean=xmean,ymean
             maxdis=0.5*sqrt(pxmean**2+pymean**2)
             if maxdis<50:
@@ -456,9 +459,10 @@ path=r'/Users/phykc/Documents/Work/beads/'
 file=r'D1 F X10 300UM V3.avi'
 scale=1.55
 framerate=0.44
-# use a guess larger than the average
-guessx=10
-guessy=0
-bt=Beadtracker(path, file, scale, framerate, guessx,guessy)
+guessx=100 #in pixels per frame
+guessy=0 #in pixels per frame
+wait_time=0 #in ms or 0 to wait for a key press
+area_limit=500 #in pixels
+bt=Beadtracker(path, file, scale, framerate, guessx,guessy, wait_time, area_limit)
 
 
