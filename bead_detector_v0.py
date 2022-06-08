@@ -112,11 +112,13 @@ class Process_beads(Movie):
                 self.area_list.append(bead_info.area)
                 self.bead_list.append(bead_info.bead_no)
         
-    def pairup(self, Xmean, Ymean, maxdistance=800, w1=1,w2=1):
-        self.Xmean=Xmean
-        self.Ymean=Ymean
+    def pairup(self,Xmean_array, Ymean_array, size,maxdistance=800, w1=1,w2=1):
+        self.size=size
         self.w1=w1
         self.w2=w2
+        self.Xmean_array=Xmean_array
+        self.Ymean_array=Ymean_array
+        
         self.maxdistance=maxdistance
         framesl=np.arange(0,max(self.frame_no_list)+1)
         #Establish list of the indicies for cells tracked in each frame
@@ -131,8 +133,8 @@ class Process_beads(Movie):
         #a maxium to create a link
         self.frame1index=[]
         self.frame2index=[]
-        
-        for a in range(2,len(frameindexs)-1):
+        # print(self.Xmean_array)
+        for a in range(1,len(frameindexs)-1):
             #b and c become the IDs from the CSV file
             if len(frameindexs[a])>0 and len(frameindexs[a+1])>0:
              #Create an array to store the seprations from from fram n and n+1
@@ -147,7 +149,10 @@ class Process_beads(Movie):
                         y1=self.y_list[b]
                         x2=self.x_list[c]
                         y2=self.y_list[c]
-                        seperation=self.w1*sqrt(((x2-self.Xmean)-x1)**2+((y2-self.Ymean)-y1)**2)+self.w2*abs(area2-area1)
+                        ix=int(x1//(self.width/self.size[0]))
+                        jx=int(y1//(self.height/self.size[1]))
+                    
+                        seperation=self.w1*sqrt(((x2-self.Xmean_array[ix,jx])-x1)**2+((y2-self.Ymean_array[ix,jx])-y1)**2)+self.w2*abs(area2-area1)
                         
                         separr[b1,c1]=seperation
                  noresult=True
@@ -158,17 +163,20 @@ class Process_beads(Movie):
                     while noresult==True and rep<2:
                         minval=np.amin(separr[i,:])
                         result=(np.where(separr[i,:] == np.amin(separr[i,:])))
-                     
-                        if minval==np.amin(separr[i:,result]) and minval<=self.maxdistance:
-                            self.frame1index.append(frameindexs[a][i])
-                            self.frame2index.append(frameindexs[a+1][result[0][0]])
-                            noresult=False
-                            
-                            
-                        else:
-                            separr[i,result]=500
-                            
-                        rep+=1
+                        try:
+                            if minval==np.amin(separr[i:,result]) and minval<=self.maxdistance:
+                                self.frame1index.append(frameindexs[a][i])
+                                self.frame2index.append(frameindexs[a+1][result[0][0]])
+                                noresult=False
+                                
+                                
+                            else:
+                                separr[i,result]=500
+                                
+                            rep+=1
+                        except ValueError:
+                            rep+=1
+                            pass
     def listup(self):    
         #Create a list of the linking indicies between frame na dn n+1
         linklist=[]
@@ -239,7 +247,7 @@ class Process_beads(Movie):
         
             #Put all the data in this list such that each path is an object in the list   
             self.datapack.append([xpos, ypos, tpos, area,b_number])    
-        maxvalueallowed=self.maxdistance*1.5
+        maxvalueallowed=self.maxdistance
         
         i=0
         while i<len(self.datapack)-1:
@@ -263,8 +271,9 @@ class Process_beads(Movie):
                     sx=self.datapack[v][0][0]
                     sy=self.datapack[v][1][0]
                     sarea=self.datapack[v][3][0]
-    
-                    sep=self.w1*sqrt(((sx-self.Xmean*2)-endx)**2+((sy-self.Ymean*2)-endy)**2)+self.w2*abs(sarea-endarea)
+                    ix=int(sx//(self.width/self.size[0]))
+                    jx=int(sy//(self.height/self.size[1]))
+                    sep=self.w1*sqrt(((sx-self.Xmean_array[ix,jx]*2)-endx)**2+((sy-self.Ymean_array[ix,jx]*2)-endy)**2)+self.w2*abs(sarea-endarea)
 
                     svals.append(sep)
                    
@@ -317,10 +326,11 @@ class Process_beads(Movie):
         
         #Unpack datapack into a full dataframe for one file at a time.
         # data pack : [xpos, ypos, tpos]
+        
         for i,dat in enumerate(self.datapack):
             pathlength=len(dat[0])
             for j in range(pathlength):
-                 
+                
                 if i==0 and j==0:
                     d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]]}
                     df1=pd.DataFrame(data=d)
@@ -333,24 +343,27 @@ class Process_beads(Movie):
                 elif j==1:
                     separation=sqrt((dat[0][j]-dat[0][j-1])**2+(dat[1][j]-dat[1][j-1])**2)
                     speed=separation/(dat[2][j]-dat[2][j-1])
-                 
+                    deltax=dat[0][j]-dat[0][j-1]
+                    deltay=dat[1][j]-dat[1][j-1]
                         
-                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed]}
+                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed], 'delx':[deltax], 'dely':[deltay]}
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
                     
                 elif j==2:
                     separation=sqrt((dat[0][j]-dat[0][j-1])**2+(dat[1][j]-dat[1][j-1])**2)
                     speed=separation/(dat[2][j]-dat[2][j-1])
-                   
-                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed]}
+                    deltax=dat[0][j]-dat[0][j-1]
+                    deltay=dat[1][j]-dat[1][j-1]
+                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed],'delx':[deltax], 'dely':[deltay]}
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
                     
                 elif j==pathlength-1:
                     separation=sqrt((dat[0][j]-dat[0][j-1])**2+(dat[1][j]-dat[1][j-1])**2)
                     speed=separation/(dat[2][j]-dat[2][j-1])
-                    
+                    deltax=dat[0][j]-dat[0][j-1]
+                    deltay=dat[1][j]-dat[1][j-1]
                     total_dis=separation+df1.loc[df1['Bead number'] == i, 'di'].sum()
                     net_dis=sqrt((dat[0][j]-dat[0][0])**2+(dat[1][j]-dat[1][0])**2)
                     total_time=(dat[2][j]-dat[2][0])
@@ -372,27 +385,30 @@ class Process_beads(Movie):
                     deltanetx=dat[0][j]-dat[0][0]
                     deltanety=dat[1][j]-dat[1][0]
                     mean_sl_speed=net_dis/total_time
-                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed], 'Total Distance':[total_dis],'Net Distance':[net_dis],'Max Step':[max_dis],'dmax':[dmax],'Total Time':[total_time],'Mean straight-line speed':[mean_sl_speed],'Linear Forward Progression':[mean_sl_speed/mean_curv_speed],'net delta x':deltanetx,'net delta y':deltanety}
+                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed],'delx':[deltax], 'dely':[deltay], 'Total Distance':[total_dis],'Net Distance':[net_dis],'Max Step':[max_dis],'dmax':[dmax],'Total Time':[total_time],'Mean straight-line speed':[mean_sl_speed],'Linear Forward Progression':[mean_sl_speed/mean_curv_speed],'net delta x':deltanetx,'net delta y':deltanety}
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
                     
                 else:
                     separation=sqrt((dat[0][j]-dat[0][j-1])**2+(dat[1][j]-dat[1][j-1])**2)
                     speed=separation/(dat[2][j]-dat[2][j-1])
-                   
+                    deltax=dat[0][j]-dat[0][j-1]
+                    deltay=dat[1][j]-dat[1][j-1]
                 
-                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed]}
+                    d={'Bead number':[i],'x':[dat[0][j]],'y':[dat[1][j]],'t':[dat[2][j]], 'area':[dat[3][j]],'di':[separation], 'vi':[speed],'delx':[deltax], 'dely':[deltay]}
                     
                     df2=pd.DataFrame(data=d)
                     df1=df1.append(df2,ignore_index = True)
-             
+    
+        df1['x_pix']=df1['x']
+        df1['y_pix']=df1['y']
         df1['x']=df1['x']/self.scale
         df1['y']=df1['y']/self.scale
         df1['t']=df1['t']*self.tpf
         df1['area']=df1['area']/self.scale**2
         df1['di']=df1['di']/self.scale
         df1['vi']=df1['vi']/(self.scale*self.tpf)
-        if df1.shape[1]>8:
+        if df1.shape[1]>10:
             df1['Total Distance']=df1['Total Distance']/self.scale
             df1['Net Distance']=df1['Net Distance']/self.scale
             df1['Max Step']=df1['Max Step']/self.scale
@@ -404,6 +420,29 @@ class Process_beads(Movie):
         
         
         self.dataframe=df1    
+    def findlocalmeans(self, meanx, meany, size):
+        self.size=size
+        self.avearrayx=np.ones(self.size,dtype=float)
+        self.avearrayy=np.ones(self.size,dtype=float)
+        self.avearrayx*=meanx
+        self.avearrayy*=meany
+        
+        xstep=self.width/self.size[0]
+        ystep=self.height/self.size[1]
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                box=self.dataframe[(self.dataframe['x_pix']>i*xstep) & (self.dataframe['x_pix']<i*xstep+xstep) &(self.dataframe['y_pix']>j*ystep) & (self.dataframe['y_pix']<j*ystep+ystep)]
+                if len(box)>0:
+                    self.avearrayx[i,j]=box['delx'].mean()
+                    self.avearrayy[i,j]=box['dely'].mean()
+                else:
+                    self.avearrayx[i,j]=meanx
+                    self.avearrayy[i,j]=meany
+                    
+        return self.avearrayx,self.avearrayy
+                    
+                
+        
         
     def write_excel(self):
         if self.dataframe.shape[1]>8:
@@ -422,16 +461,24 @@ class Process_beads(Movie):
         plt.show()
      
 class Beadtracker():
-    def __init__(self,path, file, scale, framerate, guessx, guessy, wait_time, area_limit):
+    def __init__(self,path, file, scale, framerate, guessx, guessy, wait_time, area_limit,size):
+        self.size=size
         analysis=Process_beads(path, file, scale, framerate, wait_time, area_limit)
         analysis.run()
         # try:
         analysis.create_data_lists()
-        analysis.pairup(guessx,guessy)
+        x_arraymean=np.ones(self.size,dtype=float)
+        y_arraymean=np.ones(self.size,dtype=float)
+        x_arraymean*=guessx
+        y_arraymean*=guessy
+        
+        analysis.pairup(x_arraymean,y_arraymean, self.size)
         analysis.listup()
         analysis.bead_pathways()
         analysis.createdatapack()
         xmean,ymean, tracks, maxlength=analysis.find_means()
+        analysis.applyscales()
+        x_arraymean, y_arraymean=analysis.findlocalmeans(xmean,ymean,self.size)
         deltaxy=50
         count=0
         while deltaxy>0.5 and count<25:
@@ -440,11 +487,14 @@ class Beadtracker():
             if maxdis<50:
                 maxdis=100
             print(xmean,ymean, tracks, maxlength)
-            analysis.pairup(xmean,ymean, maxdis)
+            analysis.pairup(x_arraymean,y_arraymean, self.size, maxdis)
             analysis.listup()
             analysis.bead_pathways()
             analysis.createdatapack()
+            
             xmean,ymean, tracks, maxlength=analysis.find_means()
+            analysis.applyscales()
+            x_arraymean,y_arraymean=analysis.findlocalmeans(xmean,ymean,self.size)
             deltaxy=sqrt((xmean-pxmean)**2+(ymean-pymean)**2)
             count+=1
         try:
@@ -454,16 +504,23 @@ class Beadtracker():
             analysis.plothisogram()
         except ValueError:
              print('Failed to work!')
+        plt.imshow(x_arraymean.T)
+        plt.colorbar()
+        plt.show()
+        plt.imshow(y_arraymean.T)
+        plt.colorbar()
+        plt.show()
+
 
 path=r'/Users/phykc/Documents/Work/beads/'    
 file=r'D1 F X10 300UM V3.avi'
 scale=1.55
 framerate=0.44
-guessx=100 #in pixels per frame
+guessx=50 #in pixels per frame
 guessy=0 #in pixels per frame
-wait_time=1000 #in ms
+wait_time=1 #in ms
 area_limit=500 #in pixels
-bt=Beadtracker(path, file, scale, framerate, guessx,guessy, wait_time, area_limit)
-
+size=(20,20)
+bt=Beadtracker(path, file, scale, framerate, guessx,guessy, wait_time, area_limit, size)
 
 
